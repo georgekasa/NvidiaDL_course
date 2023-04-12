@@ -61,7 +61,7 @@ inputs = keras.Input(shape=(224, 224, 3))
 # Separately from setting trainable on the model, we set training to False 
 x = base_model(inputs, training=False)
 x = keras.layers.Flatten()(x)
-x = keras.layers.Dense(512, activation = "relu", bias_initializer=keras.initializers.Constant(value=0.001))(x)#Karpathy trick
+x = keras.layers.Dense(512, activation = "relu", kernel_initializer = 'he_normal')(x)#Karpathy trick
 x = keras.layers.Dropout(0.5)(x)
 outputs = keras.layers.Dense(numberOfcategories, activation = "softmax", 
                              bias_initializer = keras.initializers.Constant(-np.log(1/numberOfcategories)))(x)#Also Karpathy trick
