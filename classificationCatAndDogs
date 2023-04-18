@@ -1,0 +1,279 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import PIL
+import tensorflow as tf
+import os
+from tensorflow import keras
+from keras import layers
+from keras.models import Sequential
+import shutil
+from pathlib import Path
+import cv2
+
+#https://github.com/georgekasa/courseraAdvancedComputerVisionTensorFlow-/blob/main/Copy_of_C3W4_Assignment_final.ipynb#
+def do_salience(image, model, label, prefix):
+  '''
+  Generates the saliency map of a given image.
+  Args:
+    image (file) -- picture that the model will classify
+    model (keras Model) -- your cats and dogs classifier
+    label (int) -- ground truth label of the image
+    prefix (string) -- prefix to add to the filename of the saliency map
+  '''
+
+  # Read the image and convert channel order from BGR to RGB
+  img_read = cv2.imread(image)
+  img = cv2.cvtColor(img_read, cv2.COLOR_BGR2RGB)
+
+  # Resize the image to 300 x 300 and normalize pixel values to the range [0, 1]
+  img = cv2.resize(img, (img_width,img_height))/255.0
+  kek = img
+
+  # Add an additional dimension (for the batch), and save this in a new variable
+  img = np.expand_dims(img, axis=0)
+
+
+  # Declare the number of classes
+  # YOUR CODE HERE
+  num_classes = 2
+  expected_output = tf.one_hot([label] * img.shape[0], num_classes)
+  # Define the expected output array by one-hot encoding the label
+  # The length of the array is equal to the number of classes
+  # YOUR CODE HERE
+  print(expected_output)
+
+  # Witin the GradientTape block:
+  # Cast the image as a tf.float32
+  # Use the tape to watch the float32 image
+  # Get the model's prediction by passing in the float32 image
+  # Compute an appropriate loss
+  # between the expected output and model predictions.
+  # you may want to print the predictions to see if the probabilities adds up to 1
+  # YOUR CODE HERE
+  with tf.GradientTape() as tape:
+    image_tf = tf.cast(img, tf.float32)
+    tape.watch(image_tf)
+    predictions = model(image_tf)
+    loss = tf.keras.losses.categorical_crossentropy(
+        expected_output, predictions
+    )   
+  print(expected_output, predictions)
+  # get the gradients of the loss with respect to the model's input image
+  gradients = tape.gradient(loss, image_tf)
+
+    
+  # generate the grayscale tensor
+  #destory the filter later
+  print(gradients.shape)
+  grayscale_tensor = tf.reduce_sum(tf.abs(gradients), axis=-1)
+  print(grayscale_tensor.shape)
+
+  # normalize the pixel values to be in the range [0, 255].
+
+  # the max value in the grayscale tensor will be pushed to 255.
+  # the min value will be pushed to 0.
+  # Use the formula: 255 * (x - min) / (max - min)
+  # Use tf.reduce_max, tf.reduce_min
+  # Cast the tensor as a tf.uint8
+  # YOUR CODE HERE
+  normalized_tensor = 255 * (grayscale_tensor - tf.reduce_min(grayscale_tensor)) / (tf.reduce_max(grayscale_tensor) - tf.reduce_min(grayscale_tensor))
+  normalized_tensor = tf.cast(normalized_tensor, dtype=tf.uint8)  
+    
+  # Remove dimensions that are size 1
+  normalized_tensor = tf.squeeze(normalized_tensor)
+
+    
+  # plot the normalized tensor
+  # Set the figure size to 8 by 8
+  # do not display the axis
+  # use the 'gray' colormap
+  # This code is provided for you.
+  plt.figure(figsize=(8, 8))
+  plt.axis('off')
+  plt.imshow(normalized_tensor, cmap='gray')
+  plt.show()
+
+  # optional: superimpose the saliency map with the original image, then display it.
+  # we encourage you to do this to visualize your results better
+  gradient_color = cv2.applyColorMap(normalized_tensor.numpy(), cv2.COLORMAP_HOT)
+  gradient_color = gradient_color / 255.0
+  print(type(kek))
+  print(type(gradient_color))
+  super_imposed = cv2.addWeighted(kek, 0.5, gradient_color, 0.5, 0.0)
+  plt.figure(figsize=(8, 8))
+  plt.imshow(super_imposed)
+  plt.axis('off')
+  plt.show()
+
+
+  # save the normalized tensor image to a file. this is already provided for you.
+  salient_image_name = prefix + image
+  #normalized_tensor = tf.expand_dims(normalized_tensor, -1)
+ # normalized_tensor = tf.io.encode_jpeg(super_imposed, quality=100)
+ # writer = tf.io.write_file(salient_image_name, super_imposed)
+  cv2.imwrite("image.jpg", 255*super_imposed.astype(np.float32))
+
+
+def printImages():
+  '''
+  shows the augmented images
+  Args:
+
+  '''
+  for images, labels in train_ds.take(1):
+    for i in range(9):
+      augmented_images = data_augmentation(images)
+      ax = plt.subplot(3,3,i+1)
+      plt.imshow(augmented_images[0].numpy().astype("uint8"))
+      plt.axis("off")
+    plt.show()
+
+
+
+def plot_history(history):
+    '''
+    plots the history of the training and validation
+    Args:history from tensorflow model
+
+    '''
+    acc = history.history['accuracy']
+    val_acc = history.history['val_accuracy']
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+    epochs = range(1, len(acc) + 1)
+    plt.plot(epochs, acc, 'bo', label='Training acc')
+    plt.plot(epochs, val_acc, 'b', label='Validation acc')
+    plt.title('Training and validation accuracy')
+    plt.legend()
+    plt.figure()
+    plt.plot(epochs, loss, 'bo', label='Training loss')
+    plt.plot(epochs, val_loss, 'b', label='Validation loss')
+    plt.title('Training and validation loss')
+    plt.legend()
+    plt.show()
+
+
+
+batch_size = 64
+img_height = 180
+img_width = 180
+
+data_dir = '/media/gkasap/ssd256gb/datasets/kagglecatsanddogs_5340/PetImages'
+
+
+img_link=list(Path('/media/gkasap/ssd256gb/datasets/kagglecatsanddogs_5340/PetImages/').glob(r'**/*.jpg'))
+count_num=0
+for lnk in img_link:
+    binary_img=open(lnk,'rb')
+    find_img=tf.compat.as_bytes('JFIF') in binary_img.peek(10)
+    if not find_img:
+        count_num+=1
+        os.remove(str(lnk))
+print('Total %d pcs image delete from Dataset' % count_num)
+
+count_num=0
+for lnk in img_link:
+
+    try:
+        with open(lnk, 'rb') as f:
+            f.read()
+        # if reading the file didn't raise an error, it's not corrupt
+    except:
+        print(f'Removing corrupt file: {lnk}')
+        os.remove(lnk)
+        count_num+=1
+print('Total %d pcs image delete from Dataset' % count_num)
+
+
+train_ds = tf.keras.utils.image_dataset_from_directory(
+  data_dir,
+  validation_split=0.2,
+  subset="training",
+  seed=123,
+  image_size=(img_height, img_width),
+  batch_size=batch_size)
+
+val_ds = tf.keras.utils.image_dataset_from_directory(
+  data_dir,
+  validation_split=0.2,
+  subset="validation",
+  seed=123,
+  image_size=(img_height, img_width),
+  batch_size=batch_size)
+
+
+#print(train_ds.class_indices)
+counter = 0
+# for image_batch, labels_batch in train_ds:
+#     try:
+#         for image_valid, labels_valid in val_ds:
+#             if (np.array_equal(image_valid, image_batch)):
+#                 print("True")
+#                 break
+#         counter += 1
+#         print(counter)
+
+
+print(val_ds.class_names)
+
+
+AUTOTUNE = tf.data.AUTOTUNE
+train_ds = train_ds.prefetch(buffer_size=AUTOTUNE)
+#train_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
+val_ds = val_ds.prefetch(buffer_size=AUTOTUNE)
+#val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+data_augmentation = keras.Sequential(
+  [
+    layers.RandomFlip("horizontal"),
+    layers.RandomRotation(0.1),
+    layers.RandomZoom(0.1),
+  ]
+)
+printImages()
+num_classes = 2
+input_shape=keras.Input(shape=(img_height,img_width,3))
+
+x = layers.Resizing(img_height, img_width)(input_shape)
+x = data_augmentation(x)
+x = layers.Rescaling(1./255)(x)
+x = layers.Conv2D(16, 3, padding='same', activation='relu', kernel_initializer="he_normal")(x)
+x = layers.MaxPooling2D()(x)
+x = layers.Conv2D(32, 3, padding='same', activation='relu', kernel_initializer="he_normal")(x)
+x = layers.MaxPooling2D()(x)
+x = layers.Conv2D(64, 3, padding='same', activation='relu', kernel_initializer="he_normal")(x)
+x = layers.MaxPooling2D()(x)
+x = layers.Dropout(0.2)(x)
+x = layers.Flatten()(x)
+x = layers.Dense(128, activation='relu', kernel_initializer="he_normal")(x)
+out = layers.Dense(num_classes, name="outputs", activation="softmax",
+                  bias_initializer = keras.initializers.Constant(-np.log(1/num_classes)))(x)# bias_initializer = -np.log(1/num_classes))
+model = keras.Model(inputs=input_shape, outputs=out)
+
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+              #loss = tf.keras.losses.CategoricalCrossentropy(),
+              metrics=['accuracy'])
+
+
+results = model.evaluate(train_ds, batch_size=batch_size, verbose=0)
+print("Loss: {:0.4f}".format(results[0]))
+
+#0.56 0.53
+
+#0.54 0.52 0.45 0.44
+#0.59,0.57,50,0.5!!!! so is better iwth karpathy trick
+epochs = 5
+history = model.fit(
+  train_ds,
+  validation_data=val_ds,
+  epochs=epochs,
+  verbose = 1,
+  shuffle=True,
+)
+#steps_per_epoch=train_it.samples/train_it.batch_size,
+#validation_steps=valid_it.samples/valid_it.batch_size,
+do_salience("/media/gkasap/ssd256gb/datasets/kagglecatsanddogs_5340/PetImages/Dog/56.jpg", model, 1, "something")
+print("Finished")
+
+#2023-04-18 11:56:48.294018: W tensorflow/core/kernels/data/cache_dataset_ops.cc:856] The calling iterator did not fully read the dataset being cached. In order to avoid unexpected truncation of #the dataset, the partially cached contents of the dataset  will be discarded. This can happen if you have an input pipeline similar to `dataset.cache().take(k).repeat(
